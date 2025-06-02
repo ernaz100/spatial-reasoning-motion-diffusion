@@ -14,7 +14,7 @@ splits_dir: datasets/annotations/humanml3d/splits_filtered
 
 # Motion and text settings
 min_seconds: 2.0
-max_seconds: 10.0
+max_seconds: 4.0
 preload: true
 tiny: false
 

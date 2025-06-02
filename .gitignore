@@ -17,6 +17,8 @@ wandb/
 # C extensions
 *.so
 
+deps/
+
 # Distribution / packaging
 .Python
 build/
