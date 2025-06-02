@@ -1,0 +1,44 @@
+_target_: pytorch_lightning.Trainer
+
+max_epochs: 10000
+log_every_n_steps: 1
+num_sanity_val_steps: 0
+check_val_every_n_epoch: 1
+accelerator: cpu
+devices: 1
+
+callbacks:
+  # Save latest checkpoint every epoch
+  - _target_: pytorch_lightning.callbacks.ModelCheckpoint
+    filename: latest-{epoch}
+    every_n_epochs: 1
+    save_top_k: 1
+    save_last: true
+  # Save best validation loss checkpoint
+  - _target_: pytorch_lightning.callbacks.ModelCheckpoint
+    filename: best-val-loss-{epoch}-{val_loss:.4f}
+    monitor: val_loss
+    mode: min
+    save_top_k: 1
+    save_last: false
+  - _target_: src.callback.progress.ProgressLogger
+    precision: 3
+  - _target_: src.callback.tqdmbar.TQDMProgressBar
+
+logger:
+  # Multiple loggers: CSV for local logging, wandb for cloud tracking
+  - _target_: src.logger.csv.CSVLogger
+    save_dir: ${run_dir}
+    name: logs
+  # - _target_: pytorch_lightning.loggers.WandbLogger
+  #   name: ${exp_name}
+  #   project: stmc-keyframe-conditioning  # wandb project name
+  #   entity: ernaz100  # your wandb username/organization
+  #   save_dir: ${run_dir}
+  #   log_model: false  # Set to true if you want to log model checkpoints to wandb
+  #   offline: false  # Set to true for offline logging
+  #   tags:
+  #     - keyframe-conditioning
+  #     - motion-diffusion
+  #     - ${dataset}
+  #   notes: "STMC training with keyframe conditioning" 

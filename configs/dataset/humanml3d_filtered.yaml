@@ -1,0 +1,24 @@
+defaults:
+  - text_encoder: clip
+  - motion_loader: amass_smplrifke
+
+# Dataset configuration for HumanML3D with filtered splits
+# This configuration excludes missing HumanAct12 files
+
+_target_: src.data.text_motion.TextMotionDataset
+name: humanml3d_filtered
+split: ???
+
+# Use filtered splits that only include available motion files
+splits_dir: datasets/annotations/humanml3d/splits_filtered
+
+# Motion and text settings
+min_seconds: 2.0
+max_seconds: 10.0
+preload: true
+tiny: false
+
+# Data augmentation settings
+drop_motion_perc: 0.1  # Probability of dropping motion conditioning
+drop_cond: 0.1         # Probability of dropping text conditioning  
+drop_trans: 0.5        # Probability of dropping translation 
