@@ -119,7 +119,12 @@ def smpldata_to_smplrifkefeats(smpldata) -> Tensor:
     return features
 
 
-def smplrifkefeats_to_smpldata(features: Tensor, first_angle=0.0):
+def smplrifkefeats_to_smpldata(
+    features: Tensor,
+    first_angle: float = 0.0,
+    *,
+    abs_root: bool = False,
+):
     (
         root_grav_axis,
         vel_trajectory_local,
@@ -131,36 +136,58 @@ def smplrifkefeats_to_smpldata(features: Tensor, first_angle=0.0):
     poses_mat_local = rotation_6d_to_matrix(poses_local)
     global_orient_local = poses_mat_local[:, 0]
 
-    # Remove the dummy last angle and integrate the angles
-    angles = torch.cumsum(vel_angles[:-1], dim=0)
-    # The first angle is zero (canonicalization)
-    angles = first_angle + torch.cat((0 * angles[[0]], angles), dim=0)
+    if abs_root:
+        # ------------------------------------------------------------------
+        # Channels already contain absolute values
+        # ------------------------------------------------------------------
+        yaw = vel_angles                       # (T,)
+        rotZ = axis_angle_rotation("Z", yaw)
 
-    # Construct the rotation matrix
-    rotZ = axis_angle_rotation("Z", angles)
+        # Absolute trajectory in world coordinates
+        trajectory = vel_trajectory_local      # (T,2) already global XY
 
-    # Rotate the trajectory (normal rotation in the indexes)
-    vel_trajectory = torch.einsum("bjk,bk->bj", rotZ[:, :2, :2], vel_trajectory_local)
+        # Rotate local joints back to world
+        joints = torch.einsum("bjk,blk->blj", rotZ[:, :2, :2], joints_local[..., [0, 1]])
+        joints = torch.stack(
+            (joints[..., 0], joints[..., 1], joints_local[..., 2]), axis=-1
+        )
+    else:
+        # ------------------------------------------------------------------
+        # Original velocity-based representation – integrate
+        # ------------------------------------------------------------------
+        # Remove the dummy last angle and integrate the angles
+        angles = torch.cumsum(vel_angles[:-1], dim=0)
+        # The first angle is zero (canonicalization)
+        angles = first_angle + torch.cat((0 * angles[[0]], angles), dim=0)
 
-    joints = torch.einsum("bjk,blk->blj", rotZ[:, :2, :2], joints_local[..., [0, 1]])
-    joints = torch.stack(
-        (joints[..., 0], joints[..., 1], joints_local[..., 2]), axis=-1
-    )
+        # Construct the rotation matrix
+        rotZ = axis_angle_rotation("Z", angles)
 
-    # Remove the dummy last velocity and integrate the trajectory
-    trajectory = torch.cumsum(vel_trajectory[..., :-1, :], dim=-2)
-    # The first position is zero
-    trajectory = torch.cat((0 * trajectory[..., [0], :], trajectory), dim=-2)
+        # Rotate the velocity back to world frame
+        vel_trajectory = torch.einsum(
+            "bjk,bk->bj", rotZ[:, :2, :2], vel_trajectory_local
+        )
+
+        joints = torch.einsum("bjk,blk->blj", rotZ[:, :2, :2], joints_local[..., [0, 1]])
+        joints = torch.stack(
+            (joints[..., 0], joints[..., 1], joints_local[..., 2]), axis=-1
+        )
+
+        # Integrate trajectory (velocities)  --------------------------------
+        trajectory = torch.cumsum(vel_trajectory[..., :-1, :], dim=-2)
+        # First position is zero
+        trajectory = torch.cat((0 * trajectory[..., [0], :], trajectory), dim=-2)
 
     # Add the pelvis (which is still zero)
     joints = torch.cat((0 * joints[:, [0]], joints), axis=1)
 
-    # Adding back the Z component
+    # ------------------------------------------------------------------
+    # Add back global translation and height to every joint
+    # ------------------------------------------------------------------
     joints[:, :, 2] += root_grav_axis[:, None]
-    # Adding back the trajectory
     joints[:, :, [0, 1]] += trajectory[:, None]
 
-    # Get back the translation
+    # Get back the translation for SMPL data
     trans = torch.cat([trajectory, root_grav_axis[..., None]], dim=1)
 
     # Remove the predicted Z rotation inside global_orient_local

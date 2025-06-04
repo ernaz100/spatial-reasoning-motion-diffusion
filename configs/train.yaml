@@ -5,12 +5,12 @@ ckpt: last
 motion_features: ${hydra:runtime.choices.motion_loader}
 text_features: ${hydra:runtime.choices.text_encoder}
 
-run_dir: outputs/cond-mdm-smpl-keyframe_${text_features}_${motion_features}_${dataset}
-exp_name: cond-mdm-smpl-keyframe_${text_features}_${motion_features}_${dataset}
+run_dir: outputs/abs_condmdi_smpl_${text_features}_${motion_features}_${dataset}
+exp_name: abs_condmdi_smpl_${text_features}_${motion_features}_${dataset}
 
 dataloader:
   _target_: torch.utils.data.DataLoader
-  batch_size: 64
+  batch_size: 128
   num_workers: 4
 
 dataset: humanml3d

@@ -11,7 +11,14 @@ def extract_joints(x, featsname, **kwargs):
 
 
 def extract_joints_smplrifke(
-    x, fps, value_from="joints", smpl_layer=None, first_angle=np.pi, **kwargs
+    x,
+    fps,
+    value_from="joints",
+    smpl_layer=None,
+    first_angle=np.pi,
+    *,
+    abs_root: bool = False,
+    **kwargs,
 ):
     assert x.shape[-1] == 205
     if value_from == "smpl":
@@ -20,7 +27,9 @@ def extract_joints_smplrifke(
     # smplrifke
     from src.tools.smplrifke_feats import smplrifkefeats_to_smpldata
 
-    smpldata = smplrifkefeats_to_smpldata(x, first_angle=first_angle)
+    smpldata = smplrifkefeats_to_smpldata(
+        x, first_angle=first_angle, abs_root=abs_root
+    )
 
     smpldata["mocap_framerate"] = fps
     poses = smpldata["poses"]

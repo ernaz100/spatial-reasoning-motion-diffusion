@@ -6,14 +6,14 @@ import random
 
 class AMASSMotionLoader:
     def __init__(
-        self, base_dir, fps, disable: bool = False, nfeats=None, umin_s=0.5, umax_s=3.0
+        self, base_dir, fps, disable: bool = False, nfeats=None, umin_s=0.5, umax_s=3.0, abs_root: bool = True
     ):
         self.fps = fps
         self.base_dir = base_dir
         self.motions = {}
         self.disable = disable
         self.nfeats = nfeats
-
+        self.abs_root = abs_root
         # unconditional, sampling the duration from [umin, umax]
         self.umin = int(self.fps * umin_s)
         assert self.umin > 0
@@ -56,5 +56,5 @@ class AMASSMotionLoader:
                 # crop the motion
                 motion = motion[n_frames_left:-n_frames_right]
 
-        x_dict = {"x": motion, "length": len(motion)}
+        x_dict = {"x": motion, "length": len(motion), "abs_root": self.abs_root}
         return x_dict

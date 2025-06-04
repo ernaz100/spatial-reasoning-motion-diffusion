@@ -37,12 +37,12 @@ diffusion:
 
   motion_normalizer:
     _target_: src.normalizer.Normalizer
-    base_dir: datasets/stats/motion_stats
+    base_dir: datasets/stats/motion_stats_abs
     eps: 1e-12
 
   text_normalizer:
     _target_: src.normalizer.Normalizer
-    base_dir: datasets/stats/text_stats
+    base_dir: datasets/stats/text_stats_abs
     eps: 1e-12
 
   timesteps: 100
