@@ -30,15 +30,15 @@ logger:
   - _target_: src.logger.csv.CSVLogger
     save_dir: ${run_dir}
     name: logs
-  # - _target_: pytorch_lightning.loggers.WandbLogger
-  #   name: ${exp_name}
-  #   project: stmc-keyframe-conditioning  # wandb project name
-  #   entity: ernaz100  # your wandb username/organization
-  #   save_dir: ${run_dir}
-  #   log_model: false  # Set to true if you want to log model checkpoints to wandb
-  #   offline: false  # Set to true for offline logging
-  #   tags:
-  #     - keyframe-conditioning
-  #     - motion-diffusion
-  #     - ${dataset}
-  #   notes: "STMC training with keyframe conditioning" 
+  - _target_: pytorch_lightning.loggers.WandbLogger
+    name: ${exp_name}
+    project: stmc-keyframe-conditioning  # wandb project name
+    entity: ernaz100  # your wandb username/organization
+    save_dir: ${run_dir}
+    log_model: false  # Set to true if you want to log model checkpoints to wandb
+    offline: false  # Set to true for offline logging
+    tags:
+      - keyframe-conditioning
+      - motion-diffusion
+      - ${dataset}
+    notes: "STMC training with keyframe conditioning" 
