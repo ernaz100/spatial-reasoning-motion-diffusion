@@ -202,6 +202,8 @@ class GaussianDiffusion(DiffuserBase):
     def training_step(self, batch, batch_idx):
         bs = len(batch["x"])
         loss = self.diffusion_step(batch, batch_idx, training=True)
+        if(loss["loss"] is None):
+            return None
         for loss_name in sorted(loss):
             loss_val = loss[loss_name]
             self.log(
@@ -216,6 +218,8 @@ class GaussianDiffusion(DiffuserBase):
     def validation_step(self, batch, batch_idx):
         bs = len(batch["x"])
         loss = self.diffusion_step(batch, batch_idx)
+        if(loss["loss"] is None):
+            return None
         for loss_name in sorted(loss):
             loss_val = loss[loss_name]
             self.log(

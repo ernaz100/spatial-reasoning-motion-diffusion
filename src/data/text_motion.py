@@ -2,6 +2,7 @@ import os
 import codecs as cs
 import orjson  # loading faster than json
 import json
+from typing import Optional
 
 import numpy as np
 from torch.utils.data import Dataset
@@ -48,6 +49,7 @@ class TextMotionDataset(Dataset):
         preload: bool = True,
         tiny: bool = False,
         splits_dir: str = None,  # Custom splits directory
+        max_frames: Optional[int] = None,  # Maximum number of frames for a motion sequence
         # only during training
         drop_motion_perc: float = 0.15,
         drop_cond: float = 0.10,
@@ -66,6 +68,7 @@ class TextMotionDataset(Dataset):
 
         self.min_seconds = min_seconds
         self.max_seconds = max_seconds
+        self.max_frames = max_frames  # Store max_frames
 
         # remove too short or too long annotations
         self.annotations = load_annotations(path)
@@ -134,6 +137,11 @@ class TextMotionDataset(Dataset):
 
         x = motion_x_dict["x"]
         length = motion_x_dict["length"]
+
+        # Truncate motion if it exceeds max_frames
+        if self.max_frames is not None and length > self.max_frames:
+            x = x[:self.max_frames]
+            length = self.max_frames
 
         output = {
             "x": x,

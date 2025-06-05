@@ -10,7 +10,7 @@ exp_name: srm-mdm-smpl_${text_features}_${motion_features}_${dataset}
 
 dataloader:
   _target_: torch.utils.data.DataLoader
-  batch_size: 64
+  batch_size: 128
   num_workers: 4
 
 dataset: humanml3d

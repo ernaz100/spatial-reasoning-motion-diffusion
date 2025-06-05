@@ -85,7 +85,7 @@ class TimeSamplerCfg:
     histogram_pdf_estimator: HistogramPdfEstimatorCfg = field(
         default_factory=HistogramPdfEstimatorCfg
     )
-    num_normalization_samples: int = 80000
+    num_normalization_samples: int = 10000
     eps: float = 1e-6
     add_zeros: bool = False
 

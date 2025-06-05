@@ -91,7 +91,6 @@ def train(cfg: DictConfig):
             logger.info("Keyframe conditioning enabled with following settings:")
             logger.info(f"  - Selection scheme: {cfg.diffusion.keyframe_selection_scheme}")
             logger.info(f"  - Keyframe mask probability: {cfg.diffusion.keyframe_mask_prob}")
-            logger.info(f"  - Zero keyframe loss: {cfg.diffusion.zero_keyframe_loss}")
             logger.info(f"  - Number of keyframes: {cfg.diffusion.n_keyframes}")
         else:
             logger.info("Keyframe conditioning disabled")
