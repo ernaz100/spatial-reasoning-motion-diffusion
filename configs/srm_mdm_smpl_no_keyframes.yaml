@@ -1,0 +1,63 @@
+# SRM-enhanced MDM configuration for motion diffusion
+# Enables frame-level time sampling and loss weighting
+# @package __global__
+
+data:
+  _target_: src.data.text_motion.TextMotionDataset
+
+  name: ${dataset}
+
+  split: ???
+  min_seconds: 2.0
+  max_seconds: 10.0
+  preload: true
+  tiny: false
+  max_frames: 81  # Maximum number of frames in your dataset
+
+diffusion:
+  _target_: src.model.srm_gaussian.SRMGaussianDiffusion
+  # Standard diffusion parameters
+  schedule:
+    _target_: src.model.schedule.cosine.CosineBetaSchedule
+    s: 8e-3
+  timesteps: 1000
+  lr: 1e-4
+  prediction: "eps"
+  
+  # Denoiser configuration
+  denoiser:
+    _target_: src.model.mdm_smpl_srm.SRMTransformerDenoiser
+    nfeats: ${data.motion_loader.nfeats}
+    tx_dim: ${data.text_encoder.nfeats}  # Fixed: use correct field reference
+    latent_dim: 512
+    ff_size: 2048
+    num_layers: 8
+    num_heads: 8
+    dropout: 0.1
+    nb_registers: 2
+    activation: gelu
+    keyframe_conditioned: false  # Enable keyframe conditioning 
+    max_timesteps: 1000
+    
+  # Data normalization  
+  motion_normalizer:
+    _target_: src.normalizer.Normalizer
+    base_dir: datasets/stats/motion_stats_abs
+    disable: false
+    
+  text_normalizer:
+    _target_: src.normalizer.Normalizer
+    base_dir: datasets/stats/text_stats_abs
+    disable: false
+    
+  # Keyframe conditioning parameters
+  keyframe_conditioned: false
+  keyframe_selection_scheme: "random_frames"  # Options: "random_frames", "first_last", "uniform_spacing"
+  keyframe_mask_prob: 0.1  # Probability to drop out keyframes during training
+  n_keyframes: 10  # Number of keyframes to select
+  
+  # SRM-specific parameters
+  time_sampler_type: "mean_beta"  # Options: "mean_beta", "independent"
+  time_sampler_sharpness: 1.0  # Controls concentration around mean time (higher = more concentrated)
+  motion_features: 205  # Number of motion features per frame
+  max_frames: ${data.max_frames}  # Maximum number of frames in your dataset

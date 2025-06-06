@@ -474,6 +474,16 @@ class SRMGaussianDiffusion(GaussianDiffusion):
                     num_valid_features = (mask.sum() * self.motion_features).clamp(min=1)
                     mean_pred_variance_val = masked_predicted_variance.sum() / num_valid_features
                     loss_dict["mean_predicted_variance"] = mean_pred_variance_val
+                    
+                    # Additional variance monitoring to understand negative loss
+                    masked_log_variance = denoiser_log_variance * mask.unsqueeze(-1).float()
+                    mean_log_variance = masked_log_variance.sum() / num_valid_features
+                    loss_dict["mean_log_variance"] = mean_log_variance
+                    
+                    # Log percentage of predictions with variance < 1.0 (which give negative log_variance)
+                    low_variance_mask = (predicted_variance < 1.0) & mask.unsqueeze(-1)
+                    low_variance_ratio = low_variance_mask.float().sum() / num_valid_features
+                    loss_dict["low_variance_ratio"] = low_variance_ratio
                 else:
                     loss_dict["mean_predicted_variance"] = 0.0 # Or some indicator that it's not available
             
