@@ -29,7 +29,7 @@ class MeanBeta(TimeSampler[MeanBetaCfg]):
         batch_size: int,
         num_samples: int = 1,
         device: Union[device, str] = "cpu",
-    ) -> Float[Tensor, "batch sample height width"]:
+    ) -> Tensor:
         """
         Sample time values using uniform t̄ strategy.
         
@@ -41,7 +41,7 @@ class MeanBeta(TimeSampler[MeanBetaCfg]):
         
         # For motion data, we treat each frame as a spatial variable
         # Resolution is (num_frames, num_features)
-        num_frames, num_features = self.resolution
+        num_frames, num_features = self.resolution #TODO: num_features is not 205 but 1 here?
         
         # Generate time values for each frame using recursive allocation
         t_frames = self._recursive_allocation_sampling(
@@ -58,7 +58,7 @@ class MeanBeta(TimeSampler[MeanBetaCfg]):
         t_bar: Float[Tensor, "batch sample"],
         num_frames: int,
         device: Union[device, str] = "cpu",
-    ) -> Float[Tensor, "batch sample num_frames"]:
+    ) -> Tensor:
         """
         Recursive allocation sampling to generate frame-wise time values.
         
@@ -86,7 +86,7 @@ class MeanBeta(TimeSampler[MeanBetaCfg]):
         target_sum: float,
         dimension: int,
         device: Union[device, str] = "cpu",
-    ) -> Float[Tensor, "dimension"]:
+    ) -> Tensor:
         """
         Generate a vector with specified sum using recursive binary splitting.
         
@@ -130,7 +130,7 @@ class MeanBeta(TimeSampler[MeanBetaCfg]):
         batch_size: int,
         num_frames: int,
         device: Union[device, str] = "cpu",
-    ) -> tuple[Float[Tensor, "batch num_frames"], Float[Tensor, "batch num_frames"]]:
+    ) -> tuple[Tensor, Tensor]:
         """
         Convenience method to get frame-level time values and weights.
         
@@ -151,4 +151,41 @@ class MeanBeta(TimeSampler[MeanBetaCfg]):
         # Restore original resolution
         self.resolution = original_resolution
         
-        return t, weights 
+        return t, weights
+
+    def get_times_for_t_bar(
+        self,
+        t_bar: Float[Tensor, "batch"],
+        num_frames: int,
+        device: Union[device, str] = "cpu",
+        calculate_weights: bool = False,
+    ) -> tuple[Tensor, Tensor]:
+        """
+        Generates frame-level time values for a given t_bar.
+
+        Args:
+            t_bar: The mean time values, one for each batch element.
+            num_frames: The number of frames for which to generate times.
+            device: The device to create tensors on.
+
+        Returns:
+            t: Time values for each frame [batch_size, num_frames]
+            weights: Loss weights for each frame [batch_size, num_frames]
+        """
+        if t_bar.ndim == 1:
+            # Add sample dimension
+            t_bar = t_bar.unsqueeze(1)
+
+        # Generate time values for each frame using recursive allocation
+        t_frames = self._recursive_allocation_sampling(
+            t_bar, num_frames, device
+        )
+
+        # remove sample dimension
+        t = t_frames.squeeze(1)
+        weights = None
+        if calculate_weights:
+            # Calculate weights
+            weights = self.get_normalization_weights(t)
+
+        return t, weights

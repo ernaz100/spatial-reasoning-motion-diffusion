@@ -11,7 +11,7 @@ data:
   min_seconds: 2.0
   max_seconds: 10.0
   preload: true
-  tiny: false
+  tiny: true
   max_frames: 81  # Maximum number of frames in your dataset
 
 diffusion:
@@ -20,7 +20,7 @@ diffusion:
   schedule:
     _target_: src.model.schedule.cosine.CosineBetaSchedule
     s: 8e-3
-  timesteps: 1000
+  timesteps: 100
   lr: 1e-4
   prediction: "eps"
   
@@ -36,8 +36,8 @@ diffusion:
     dropout: 0.1
     nb_registers: 2
     activation: gelu
-    keyframe_conditioned: True  # Enable keyframe conditioning
-    max_timesteps: 1000
+    keyframe_conditioned: false  # Enable keyframe conditioning
+    max_timesteps: 100
     
   # Data normalization  
   motion_normalizer:
@@ -50,11 +50,6 @@ diffusion:
     base_dir: datasets/stats/text_stats_abs
     disable: false
     
-  # Keyframe conditioning parameters
-  keyframe_conditioned: true
-  keyframe_selection_scheme: "random_frames"  # Options: "random_frames", "first_last", "uniform_spacing"
-  keyframe_mask_prob: 0.1  # Probability to drop out keyframes during training
-  n_keyframes: 10  # Number of keyframes to select
   
   # SRM-specific parameters
   time_sampler_type: "mean_beta"  # Options: "mean_beta", "independent"

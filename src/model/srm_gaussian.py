@@ -124,9 +124,9 @@ class SRMGaussianDiffusion(GaussianDiffusion):
             result = output
         elif self.prediction == "eps" and target_space in ["x", "xstart"]:
             # Convert eps to xstart frame by frame
-            sqrt_inv_alphas_cumprod = self.sqrt_inv_alphas_cumprod[t_expanded]
+            inv_sqrt_alphas_cumprod = self.inv_sqrt_alphas_cumprod[t_expanded]
             sqrt_inv_alphas_cumprod_minus_one = self.sqrt_inv_alphas_cumprod_minus_one[t_expanded]
-            result = sqrt_inv_alphas_cumprod * xt - sqrt_inv_alphas_cumprod_minus_one * output
+            result = inv_sqrt_alphas_cumprod * xt - sqrt_inv_alphas_cumprod_minus_one * output
         elif self.prediction in ["x", "xstart"] and target_space == "eps":
             # Convert xstart to eps frame by frame  
             sqrt_inv_one_minus_alphas_cumprod = self.sqrt_inv_one_minus_alphas_cumprod[t_expanded]
@@ -189,7 +189,7 @@ class SRMGaussianDiffusion(GaussianDiffusion):
         
         # For non-zero times, compute noise schedule coefficients
         # Clamp to avoid indexing issues
-        
+        t_expanded = t_expanded.clamp(0.0, 1.0)
         # Convert continuous time values (0-1) to discrete indices for noise schedule lookup
         # Scale to range [0, timesteps-1], convert to integers, and clamp to valid bounds
         t_indices = (t_expanded * (self.timesteps - 1)).long().clamp(0, self.timesteps - 1)
@@ -351,71 +351,42 @@ class SRMGaussianDiffusion(GaussianDiffusion):
 
         # Normalization
         x = masked(self.motion_normalizer(batch["x"]), mask)
+
         if(max_frames == 0):
             return {"loss": None, "reconstruction_loss": None, "variance_loss": None}
         
-        # Prepare base conditioning
-        y = {
-            "length": batch["length"],
-            "mask": mask,
-            "tx": self.prepare_tx_emb(batch["tx"]),
-        }
+        t_bar = torch.rand(batch_size, device=x.device)  # Random values between 0 and 1 for each batch element
 
         # SRM: Sample frame-level time values and loss weights
-        t_frames, loss_weights_sampler = self.time_sampler.get_frame_level_times( 
-            batch_size, max_frames, device=x.device
-            )
+        t_frames, _ = self.time_sampler.get_times_for_t_bar(   
+            t_bar = t_bar,
+            num_frames=max_frames,
+            device=x.device,
+            calculate_weights=False
+        )
         
         # Ensure time values are properly masked and clamped
         t_frames = t_frames * mask.float()  # Zero out padded frames
         t_frames = torch.clamp(t_frames, 0.0, 1.0)
-        loss_weights_sampler = loss_weights_sampler * mask.float()
 
-        # Keyframe Conditioning: Set noise level to 0 for keyframes
-        keyframe_mask = None
-        if self.keyframe_conditioned and training:
-            keyframe_mask = get_keyframes_mask(
-                data=batch["x"],  
-                lengths=batch["length"],
-                edit_mode=self.keyframe_selection_scheme,
-                n_keyframes=self.n_keyframes,
-                device=x.device
-            )
-            
-            if self.keyframe_mask_prob > 0.0:
-                keyframe_mask = get_random_keyframe_dropout_mask(
-                    keyframe_mask, 
-                    dropout_prob=self.keyframe_mask_prob
-                )
-            
-            # SRM: Set time to 0 for keyframes (no noise = perfect conditioning)
-            keyframe_mask = keyframe_mask & mask  # Ensure keyframes are within valid sequence
-            t_frames[keyframe_mask] = 0.0  # Zero noise level for keyframe_mask = True
-            
-            # Store keyframe information for logging and optional denoiser conditioning
-            y["keyframe_mask"] = keyframe_mask
-            y["keyframe_x0"] = x
-
-        # Create noisy version with frame-level times (keyframes will have t=0, so no noise)
+        # Create noisy version with frame-level times
         noise = masked(torch.randn_like(x), mask)
         xt = self.q_sample_frame_level(xstart=x, t_frames=t_frames, noise=noise, mask=mask)
         
-        # Note: No additional keyframe conditioning needed here since t=0 frames are already clean
-        # The q_sample_frame_level will preserve original values where t_frames=0
+        # Prepare conditioning
+        y = {
+            "length": batch["length"],
+            "mask": mask,
+            "tx": self.prepare_tx_emb(batch["tx"]),
+            "frame_times": t_frames,
+            "t_bar": t_bar,
+        }
 
-
-        
-        # Add frame-level time information to conditioning 
-        y["frame_times"] = t_frames
-        y["frame_time_mask"] = mask
-        
         # Denoise
         denoiser_output_dict = self.denoiser(xt, y) 
         
         # Extract outputs from the denoiser
-        denoiser_main_output = masked(denoiser_output_dict["output"], mask)
-        denoiser_log_variance = masked(denoiser_output_dict["log_variance"], mask) 
-        predicted_variance = masked(denoiser_output_dict["variance"], mask) 
+        denoiser_main_output = masked(denoiser_output_dict["noise_prediction"], mask)
 
         # 1. Calculate Primary Loss (reconstruction or noise prediction loss)
         primary_loss_frames = self._calculate_primary_loss(
@@ -427,73 +398,7 @@ class SRMGaussianDiffusion(GaussianDiffusion):
             mask=mask
         )
 
-        # 2. Calculate Variance Loss
-        variance_loss_frames = self._calculate_variance_loss(
-            denoiser_main_output=denoiser_main_output,
-            denoiser_log_variance=denoiser_log_variance,
-            true_noise=noise,
-            xt=xt,
-            t_frames=t_frames,
-            mask=mask
-        )
-        
-        # 3. Combine and Weight Losses
-        # Pass the loss_weights_sampler obtained from the time sampler
-        total_loss, reconstruction_loss_avg, variance_loss_avg = self._combine_and_weight_losses(
-            primary_loss_frames=primary_loss_frames,
-            variance_loss_frames=variance_loss_frames,
-            srm_loss_weights=loss_weights_sampler, # Use the sampler's output
-            mask=mask 
-        )
-        
         # Construct the loss dictionary for output and logging
-        loss_dict = {"loss": total_loss, "reconstruction_loss": reconstruction_loss_avg}
-        
-        # Additional logging for SRM
-        if training:
-            # Log time sampling statistics
-            mean_frame_time = (t_frames * mask.float()).sum() / mask.sum().clamp(min=1)
-            loss_dict["mean_frame_time"] = mean_frame_time
-            loss_dict["time_variance"] = ((t_frames - mean_frame_time) ** 2 * mask.float()).mean()
-            
-            # Log loss weighting statistics (from the sampler)
-            mean_loss_weight = (loss_weights_sampler * mask.float()).sum() / mask.sum().clamp(min=1)
-            loss_dict["mean_loss_weight"] = mean_loss_weight
-            
-            # Log variance loss if available and computed
-            if variance_loss_avg is not None:
-                loss_dict["variance_loss"] = variance_loss_avg
+        loss_dict = {"loss": primary_loss_frames.mean()}
                 
-                # Log uncertainty statistics (useful for monitoring)
-                # Ensure predicted_variance is available from denoiser for this logging
-                if predicted_variance is not None:
-                    # Mask predicted_variance before summing to only include valid frames
-                    masked_predicted_variance = predicted_variance * mask.unsqueeze(-1).float()
-                    # Denominator should be sum of mask elements times features, or sum of mask if variance is already per-feature avg
-                    # Assuming predicted_variance is [B, T, F]
-                    num_valid_features = (mask.sum() * self.motion_features).clamp(min=1)
-                    mean_pred_variance_val = masked_predicted_variance.sum() / num_valid_features
-                    loss_dict["mean_predicted_variance"] = mean_pred_variance_val
-                    
-                    # Additional variance monitoring to understand negative loss
-                    masked_log_variance = denoiser_log_variance * mask.unsqueeze(-1).float()
-                    mean_log_variance = masked_log_variance.sum() / num_valid_features
-                    loss_dict["mean_log_variance"] = mean_log_variance
-                    
-                    # Log percentage of predictions with variance < 1.0 (which give negative log_variance)
-                    low_variance_mask = (predicted_variance < 1.0) & mask.unsqueeze(-1)
-                    low_variance_ratio = low_variance_mask.float().sum() / num_valid_features
-                    loss_dict["low_variance_ratio"] = low_variance_ratio
-                else:
-                    loss_dict["mean_predicted_variance"] = 0.0 # Or some indicator that it's not available
-            
-            if self.keyframe_conditioned and y.get("keyframe_mask") is not None:
-                keyframe_mask = y["keyframe_mask"] # Retain from y dictionary
-                keyframe_ratio = keyframe_mask.float().mean()
-                loss_dict["keyframe_ratio"] = keyframe_ratio
-                
-                # Log statistics about zero-noise conditioning
-                zero_noise_frames = (t_frames == 0.0) & mask
-                loss_dict["zero_noise_ratio"] = zero_noise_frames.float().mean()
-        
         return loss_dict 

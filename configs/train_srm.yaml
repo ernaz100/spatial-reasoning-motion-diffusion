@@ -5,8 +5,8 @@ ckpt: last
 motion_features: ${hydra:runtime.choices.motion_loader}
 text_features: ${hydra:runtime.choices.text_encoder}
 
-run_dir: outputs/srm-mdm-smpl_${text_features}_${motion_features}_${dataset}
-exp_name: srm-mdm-smpl_${text_features}_${motion_features}_${dataset}
+run_dir: outputs/sanity_check${text_features}_${motion_features}_${dataset}
+exp_name: sanity_check_${text_features}_${motion_features}_${dataset}
 
 dataloader:
   _target_: torch.utils.data.DataLoader
